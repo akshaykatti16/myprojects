@@ -1,0 +1,14 @@
+#SOURCE & TARGET Kylo API URI DETAILS
+SOURCE_GET_FEEDS_URL=http://localhost:8420/api/v1/feedmgr/feeds
+SOURCE_EXPORT_FEED_URL=http://localhost:8420/api/v1/feedmgr/admin/export-feed
+TARGET_IMPORT_FEED_URL=http://localhost:9420/api/v1/feedmgr/admin/import-feed
+
+#Credentials
+SOURCE_USER_NAME=dladmin
+SOURCE_PASSWORD=thinkbig
+TARGET_USER_NAME=dladmin
+TARGET_PASSWORD=thinkbig
+
+#Feed export Directory details
+FEED_DOWNLOAD_PATH=C:\\Users\\ak186148\\KyloFeedDownload\\test
+

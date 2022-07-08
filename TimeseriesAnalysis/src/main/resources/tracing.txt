@@ -1,0 +1,31 @@
+//Tracing
+u1 [0, 1800, 1800, 900, 0] - values of i for u1
+i=0 j=0 k= 0
+i=1800 j=0 k= 1
+i=1800 j=1800 k= 1
+i=900 j=3600 k= 1
+i=0 j=4500 k= 1
+
+initial
+[],0,0
+
+//1st iteration - i=0 j=0 k=0
+if (i == 0 || j + i >= tmo) { (sid(k + 1) :: ls, 0L, k + 1)
+ls[], j,k
+[u1--1],0,1
+//2nd iteration - i=1800 j=0 k=1
+(sid(k) :: ls, j + i, k)
+ls[],j,k
+[u1--1,u1--1],1800,1
+//3rd iteration - i=1800 j=1800 k=1
+(sid(k) :: ls, j + i, k)
+[u1--1,u1--1,u1--1],3600,1
+//4th iteration - i=900 j=3600 k=1
+(sid(k) :: ls, j + i, k)
+[u1--1,u1--1,u1--1,u1--1],4500,1
+//5th iteration - i=0 j=4500 k=1
+if (i == 0 || j + i >= tmo) { (sid(k + 1) :: ls, 0L, k + 1)
+[u1--2,u1--1,u1--1,u1--1,u1--1], 0, 2
+---------------------------------------------------------
+
+u2 [0, 0, 900, 0]
