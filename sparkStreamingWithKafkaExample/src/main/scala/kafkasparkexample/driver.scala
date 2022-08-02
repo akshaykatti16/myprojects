@@ -5,6 +5,8 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.expressions.{UserDefinedFunction, Window}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.avro._
+import java.nio.file.{Files, Paths}
 
 object driver {
 
@@ -138,10 +140,101 @@ object driver {
     * */
   }
 
+  def realTimeKafkaAvroTypeProducerSink(spark: SparkSession, df: DataFrame) = {
+
+
+    //Deffine schema for json topic data
+    val schema = new StructType()
+      .add("id",IntegerType)
+      .add("firstname",StringType)
+      .add("middlename",StringType)
+      .add("lastname",StringType)
+      .add("dob_year",IntegerType)
+      .add("dob_month",IntegerType)
+      .add("gender",StringType)
+      .add("salary",IntegerType)
+    //apply json and convert to DF
+    val personDF = df.selectExpr("CAST(value AS STRING)") // First convert binary to string
+      .select(from_json(col("value"), schema).as("data"))
+    //convert DF to avro type and Write to new topic
+    personDF.select(to_avro(struct("data.*")) as "value")
+      .writeStream
+      .format("kafka")
+      .outputMode("append")
+      .option("kafka.bootstrap.servers", "AKDell5415:9092")
+      .option("topic", "kafka_avro_sink_topic1")
+      .option("checkpointLocation","src/main/resources/checkpointAvro")
+      .start()
+      .awaitTermination()
+
+    /*Binary avro data written to kafka topic
+    * C:\Users\aksha>kafka-console-consumer.bat -bootstrap-server AKDell5415:9092 --topic kafka_avro_sink_topic1
+[2022-08-02 18:24:09,965] WARN [Consumer clientId=console-consumer, groupId=console-consumer-24206] Error while fetching metadata with correlation id 2 : {kafka_avro_sink_topic1=LEADER_NOT_AVAILABLE} (org.apache.kafka.clients.NetworkClient)
+ ☻ ♀James
+Smith ─▼ ☻ ☻M ≡.
+ ♦ ►MichaelRose   ┤▼ ♠ ☻M └>
+ ♠*/
+
+  }
+
+  def realTimeKafkaAvroTypeConsumerSource(spark: SparkSession, df2: DataFrame) = {
+
+
+    val jsonFormatSchema = new String(
+      Files.readAllBytes(Paths.get("./src/main/resources/person.avsc")
+      )
+    )
+
+    val personDF2 = df2.select(from_avro(col("value"), jsonFormatSchema).as("person"))
+      .select("person.*")
+    personDF2.printSchema()
+    /*root
+ |-- id: integer (nullable = true)
+ |-- firstname: string (nullable = true)
+ |-- middlename: string (nullable = true)
+ |-- lastname: string (nullable = true)
+ |-- dob_year: integer (nullable = true)
+ |-- dob_month: integer (nullable = true)
+ |-- gender: string (nullable = true)
+ |-- salary: integer (nullable = true)
+    * */
+
+    personDF2.writeStream
+      .format("console")
+      .outputMode("append")
+      .start()
+      .awaitTermination()
+
+    /*
+    * Batch: 0
+-------------------------------------------
++---+---------+----------+--------+--------+---------+------+------+
+| id|firstname|middlename|lastname|dob_year|dob_month|gender|salary|
++---+---------+----------+--------+--------+---------+------+------+
+|  1|   James |          |   Smith|    2018|        1|     M|  3000|
+|  2| Michael |      Rose|        |    2010|        3|     M|  4000|
+|  3|  Robert |          |Williams|    2010|        3|     M|  4000|
+|  4|   Maria |      Anne|   Jones|    2005|        5|     F|  4000|
+|  5|      Jen|      Mary|   Brown|    2010|        7|      |    -1|
+|  6|    Jenou|   Maryium|Brownolk|    2011|        7|      |   900|
+|  6|    Jenou|   Maryium|Brownolk|    2011|        7|      |   900|
+|  7|    Jenou|   Maryium|Brownolk|    2011|        7|      |   900|
+|  8|    Jenou|   Maryium|Brownolk|    2011|        7|      |   900|
+|  9|    Jenou|   Maryium|Brownolk|    2011|        7|      |   900|
+| 11|   James |          |   Smith|    2018|        1|     M|  3000|
+| 12|   James |          |   Smith|    2018|        1|     M|  3000|
+| 13|   James |          |   Smith|    2018|        1|     M|  3000|
+| 14|   James |          |   Smith|    2018|        1|     M|  3000|
+| 15|   James |          |   Smith|    2018|        1|     M|  3000|
+| 16|   Shweta|          |   Smith|    2018|        1|     M|  3000|*/
+  }
+
   def main(args: Array[String]): Unit = {
     //initialize spark session
     val spark = SparkSession.builder().master("local[*]").appName("sparkStreamingWithKafkaExample").getOrCreate()
     spark.sparkContext.setLogLevel("ERROR")
+
+    //Read data from Kafka json topic
 
     val df = spark.readStream.format("kafka")
       .option("kafka.bootstrap.servers", "AKDell5415:9092")
@@ -160,11 +253,32 @@ object driver {
  |-- timestamp: timestamp (nullable = true)
  |-- timestampType: integer (nullable = true)*/
 
+    //Read from Kafka json topic and display on console
     //realTimeConsoleAppend(spark,df)
 
-    realTimeKafkaTopicAppend(spark,df)
+    //Read from Kafka json topic and write to another Kafka topic
+    //realTimeKafkaTopicAppend(spark,df)
 
+    //Read from Kafka json topic and write to another Kafka topic in avro format
+    //realTimeKafkaAvroTypeProducerSink(spark,df)
 
+    //Read Kafka topic in avro format and display data on console
+    val df2 = spark.readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", "AKDell5415:9092")
+      .option("subscribe", "kafka_avro_sink_topic1")
+      .option("startingOffsets", "earliest") // From starting
+      .load()
+    df2.printSchema()
+    /*root
+ |-- key: binary (nullable = true)
+ |-- value: binary (nullable = true)
+ |-- topic: string (nullable = true)
+ |-- partition: integer (nullable = true)
+ |-- offset: long (nullable = true)
+ |-- timestamp: timestamp (nullable = true)
+ |-- timestampType: integer (nullable = true)*/
+    realTimeKafkaAvroTypeConsumerSource(spark,df2)
 
     spark.stop()
   }
