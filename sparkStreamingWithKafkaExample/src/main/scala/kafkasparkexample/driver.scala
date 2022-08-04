@@ -1,9 +1,7 @@
 package kafkasparkexample
 
-import org.apache.log4j.{Level, LogManager}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.expressions.{UserDefinedFunction, Window}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.avro._
 import java.nio.file.{Files, Paths}
@@ -229,6 +227,166 @@ Smith ─▼ ☻ ☻M ≡.
 | 16|   Shweta|          |   Smith|    2018|        1|     M|  3000|*/
   }
 
+  def readFromHDFS(spark: SparkSession) = {
+
+    //Different types of output modes
+    //outputMode("append")    -> when you want to output only new rows to the output sink
+    //outputMode("complete")  -> when you want to aggregate the data and output the entire results to sink every time
+    //outputMode("update")    -> outputs the updated aggregated results every time to data sink when new data arrives.
+    //                            but not the entire aggregated results like complete mode.
+    //                            If the streaming data is not aggregated then, it will act as outputMode("append")
+
+    // a single .json file has multiple rows within, so schema is defined as List
+    val schema = StructType(
+      List(
+        StructField("RecordNumber", IntegerType, true),
+        StructField("Zipcode", StringType, true),
+        StructField("ZipCodeType", StringType, true),
+        StructField("City", StringType, true),
+        StructField("State", StringType, true),
+        StructField("LocationType", StringType, true),
+        StructField("Lat", StringType, true),
+        StructField("Long", StringType, true),
+        StructField("Xaxis", StringType, true),
+        StructField("Yaxis", StringType, true),
+        StructField("Zaxis", StringType, true),
+        StructField("WorldRegion", StringType, true),
+        StructField("Country", StringType, true),
+        StructField("LocationText", StringType, true),
+        StructField("Location", StringType, true),
+        StructField("Decommisioned", StringType, true)
+      )
+    )
+
+    val df = spark.readStream.schema(schema).json("hdfs://localhost:9000/user/aksha/hdfstest")
+    val groupDF = df.select("Zipcode")
+      .groupBy("Zipcode").count()
+    groupDF.printSchema()
+
+    groupDF.writeStream
+      .format("console")
+      .outputMode("complete")
+      .start()
+      .awaitTermination()
+
+    df.printSchema()
+
+    /*
+    * -------------------------------------------
+Batch: 0
+-------------------------------------------
++-------+-----+
+|Zipcode|count|
++-------+-----+
+|  76166|    1|
+|  32564|    1|
+|  85210|    1|
+|    709|    1|
+|  32046|    1|
+|  34445|    1|
+|    704|    3|
+|  34487|    1|
+|  85209|    1|
+|  76177|    2|
++-------+-----+
+===========================after adding some more .json files to folder
+-------------------------------------------
+Batch: 1
+-------------------------------------------
++-------+-----+
+|Zipcode|count|
++-------+-----+
+|  76166|    1|
+|  32564|    1|
+|  85210|    1|
+|  36275|    2|
+|    709|    1|
+|  35146|    2|
+|    708|    1|
+|  35585|    2|
+|  32046|    1|
+|  27203|    2|
+|  34445|    1|
+|  27007|    2|
+|    704|    3|
+|  27204|    2|
+|  85209|    1|
+|  34487|    1|
+|  76177|    2|*/
+
+
+  }
+
+  def produceKafkaMessage(spark: SparkSession) = {
+
+    val data = Seq (("iphone", "2007"),("iphone 3G","2008"),
+      ("iphone 3GS","2009"),
+      ("iphone 4","2010"),
+      ("iphone 4S","2011"),
+      ("iphone 5","2012"),
+      ("iphone 8","2014"),
+      ("iphone 10","2017"))
+
+    val df = spark.createDataFrame(data).toDF("key","value")
+    df.write
+      .format("kafka")
+      .option("kafka.bootstrap.servers","AKDell5415:9092")
+      .option("topic","text_topic1")
+      .save()
+
+  }
+
+  def consumeKafkaMessage(spark: SparkSession) = {
+
+    val df = spark
+      .read
+      .format("kafka")
+      .option("kafka.bootstrap.servers", "AKDell5415:9092")
+      .option("subscribe", "text_topic1")
+      .load()
+
+    df.printSchema()
+    df.show(false)
+    /*+-------------------------------+-------------+-----------+---------+------+-----------------------+-------------+
+|key                            |value        |topic      |partition|offset|timestamp              |timestampType|
++-------------------------------+-------------+-----------+---------+------+-----------------------+-------------+
+|[69 70 68 6F 6E 65 20 33 47]   |[32 30 30 38]|text_topic1|0        |0     |2022-08-04 17:01:03.481|0            |
+|[69 70 68 6F 6E 65 20 35]      |[32 30 31 32]|text_topic1|0        |1     |2022-08-04 17:01:03.481|0            |
+|[69 70 68 6F 6E 65 20 33 47 53]|[32 30 30 39]|text_topic1|0        |2     |2022-08-04 17:01:03.481|0            |
+|[69 70 68 6F 6E 65 20 31 30]   |[32 30 31 37]|text_topic1|0        |3     |2022-08-04 17:01:03.481|0            |
+|[69 70 68 6F 6E 65 20 38]      |[32 30 31 34]|text_topic1|0        |4     |2022-08-04 17:01:03.481|0            |
+|[69 70 68 6F 6E 65 20 34 53]   |[32 30 31 31]|text_topic1|0        |5     |2022-08-04 17:01:03.481|0            |
+|[69 70 68 6F 6E 65 20 34]      |[32 30 31 30]|text_topic1|0        |6     |2022-08-04 17:01:03.481|0            |
+|[69 70 68 6F 6E 65]            |[32 30 30 37]|text_topic1|0        |7     |2022-08-04 17:01:03.481|0            |
++-------------------------------+-------------+-----------+---------+------+-----------------------+-------------+*/
+
+    val df2 = df.selectExpr("CAST(key AS STRING)",
+      "CAST(value AS STRING)","topic")
+    df2.show(false)
+    /*+----------+-----+-----------+
+|key       |value|topic      |
++----------+-----+-----------+
+|iphone 3G |2008 |text_topic1|
+|iphone 5  |2012 |text_topic1|
+|iphone 3GS|2009 |text_topic1|
+|iphone 10 |2017 |text_topic1|
+|iphone 8  |2014 |text_topic1|
+|iphone 4S |2011 |text_topic1|
+|iphone 4  |2010 |text_topic1|
+|iphone    |2007 |text_topic1|
++----------+-----+-----------+
+    * */
+
+  }
+
+  def readKafkaAsBatchProcess(spark: SparkSession) = {
+
+    //Spark SQL Batch Processing – Producing Messages to Kafka Topic.
+    //produceKafkaMessage(spark)
+    consumeKafkaMessage(spark)
+
+  }
+
   def main(args: Array[String]): Unit = {
     //initialize spark session
     val spark = SparkSession.builder().master("local[*]").appName("sparkStreamingWithKafkaExample").getOrCreate()
@@ -236,13 +394,14 @@ Smith ─▼ ☻ ☻M ≡.
 
     //Read data from Kafka json topic
 
-    val df = spark.readStream.format("kafka")
+    /*val df = spark.readStream.format("kafka")
       .option("kafka.bootstrap.servers", "AKDell5415:9092")
       .option("subscribe", "kafka_topic1")
-      .option("startingOffsets", "earliest") // From starting
+      .option("startingOffsets", "earliest")
       .load()
 
-    df.printSchema()
+    df.printSchema()*/
+
     /*
     * root
  |-- key: binary (nullable = true)
@@ -263,13 +422,14 @@ Smith ─▼ ☻ ☻M ≡.
     //realTimeKafkaAvroTypeProducerSink(spark,df)
 
     //Read Kafka topic in avro format and display data on console
-    val df2 = spark.readStream
+    /*val df2 = spark.readStream
       .format("kafka")
       .option("kafka.bootstrap.servers", "AKDell5415:9092")
       .option("subscribe", "kafka_avro_sink_topic1")
-      .option("startingOffsets", "earliest") // From starting
+      .option("startingOffsets", "earliest")
       .load()
-    df2.printSchema()
+    df2.printSchema()*/
+
     /*root
  |-- key: binary (nullable = true)
  |-- value: binary (nullable = true)
@@ -278,7 +438,13 @@ Smith ─▼ ☻ ☻M ≡.
  |-- offset: long (nullable = true)
  |-- timestamp: timestamp (nullable = true)
  |-- timestampType: integer (nullable = true)*/
-    realTimeKafkaAvroTypeConsumerSource(spark,df2)
+    //realTimeKafkaAvroTypeConsumerSource(spark,df2)
+
+    //read json from a hdfs folder and write aggregrated data to console in complete ouptut mode
+    //readFromHDFS(spark)
+    
+    //Read kafka source and batch process with spark sql
+    readKafkaAsBatchProcess(spark)
 
     spark.stop()
   }
