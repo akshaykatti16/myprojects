@@ -2,6 +2,10 @@ import java.sql.*;
 
 public class HiveJDBCConnect {
     public static void main(String[] args) {
+
+        //IMPORTANT
+        //Add hadoop commons jar as dependency
+
         Connection con = null;
         try {
             String conStr = "jdbc:hive2://AKDell5415:10000/emp";
