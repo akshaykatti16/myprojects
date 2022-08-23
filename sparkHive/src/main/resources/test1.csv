@@ -1,0 +1,4 @@
+name,salary,dob,active
+akshay1,2000.00,1991-06-15,true
+akshay2,2001.00,1991-06-16,true
+akshay3,2002.00,1991-06-17,false
