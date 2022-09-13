@@ -24,11 +24,109 @@ object examples {
     import spark.implicits._
 
     //Read source
-    val source = spark.sparkContext.textFile("C:\\Users\\ak186148\\OneDrive - Teradata\\Desktop\\elb.log")
+    val source = spark.sparkContext.textFile("src/main/resources/elb.log")
+    println("source is of type - "+source.getClass)
+    println("source.getStorageLevel before persisting"+source.getStorageLevel)
+    //source.persist(StorageLevel.MEMORY_ONLY_SER)
+    println("source.getStorageLevel after persisting"+source.getStorageLevel)
+    //source.unpersist()
+/*
+* source is of type - class org.apache.spark.rdd.MapPartitionsRDD
+source.getStorageLevel before persistingStorageLevel(1 replicas)
+source.getStorageLevel after persistingStorageLevel(memory, 1 replicas)
+source.getNumPartitions2
+source.partitions.size 2
+spark.sparkContext.defaultParallelism 16
+spark.sql.shuffle.partitions 200
+sourcedf type is of - class org.apache.spark.sql.Dataset*/
+
+    println("source.getNumPartitions"+source.getNumPartitions)
     println("source.partitions.size "+source.partitions.size)
     println("spark.sparkContext.defaultParallelism "+spark.sparkContext.defaultParallelism)
-    val rdd1 = spark.sparkContext.parallelize(1 to 2)
-    println("rdd of 1 to 10 parts "+rdd1.getNumPartitions)
+    println("spark.sql.shuffle.partitions "+spark.conf.get("spark.sql.shuffle.partitions"))
+    source.collect().foreach(println)
+    //action 1 | job 0 | 1 stage (read)
+
+    val sourcedf = source.filter(line => line.matches(regex.toString()))
+      /*splitting each record of matched ones*/
+      .map(record=> record.split(" "))
+      /*assign schema*/
+      .map(col=>LogCol(col(0),col(1),col(2),col(3),col(4),col(5),col(6),col(7),col(8),col(9),col(10),col(11),col(12),col(13),col(14)))
+      .toDF()
+
+    println("sourcedf type is of - "+sourcedf.getClass)
+    sourcedf.show(false)
+    // action 2 | job 1 | 1 Stage (filter,map,map - all in same stage as they are narrow transformations)
+
+    sourcedf.cache()
+    val resdf = sourcedf.select("apilink").groupBy("apilink").agg(count("*").alias("cnt")).sort(col("cnt").desc_nulls_last)
+    resdf/*.repartition(3).*/show()
+    // action 3 | job 2 | stages 2 (stage 1 -> till groupby  ; stage 2 -> after group by)
+
+    //resdf.cache()
+    resdf.collect().foreach(println)
+    // action 4 | job 3 | stages 2 (stage 1 -> till grouped result  ; stage 2 -> start collecting to driver)
+    /*
+    * without caching
+    *
+Job Id  ▾
+Description
+Submitted
+Duration
+Stages: Succeeded/Total	Tasks (for all stages): Succeeded/Total
+4
+collect at examples.scala:67
+2022/09/07 20:27:06	0.7 s	2/2 (1 skipped)
+206/206 (2 skipped)
+3
+collect at examples.scala:67
+2022/09/07 20:27:06	0.6 s	2/2
+202/202
+2
+show at examples.scala:63
+2022/09/07 20:27:04	1 s	2/2
+202/202
+1
+show at examples.scala:58
+2022/09/07 20:27:04	40 ms	1/1
+1/1
+0
+collect at examples.scala:47
+2022/09/07 20:27:02	0.2 s	1/1
+2/2 */
+
+/* with caching
+*
+Job Id  ▾
+Description
+Submitted
+Duration
+Stages: Succeeded/Total	Tasks (for all stages): Succeeded/Total
+4
+collect at examples.scala:67
+2022/09/07 20:25:48	0.8 s	2/2 (1 skipped)
+206/206 (2 skipped)
+3
+cache at examples.scala:66
+2022/09/07 20:25:48	0.6 s	2/2
+202/202
+2
+show at examples.scala:63
+2022/09/07 20:25:46	1 s	2/2
+202/202
+1
+show at examples.scala:58
+2022/09/07 20:25:46	36 ms	1/1
+1/1
+0
+collect at examples.scala:47
+2022/09/07 20:25:43	0.3 s	1/1
+2/2*/
+    Thread.sleep(300000)
+    System.exit(0)
+
+    /*val rdd1 = spark.sparkContext.parallelize(1 to 200,5)
+    println("rdd1 numparts "+rdd1.getNumPartitions)*/
 
     //matching log record with regex
     var res = source.filter(line => line.matches(regex.toString()))
@@ -749,11 +847,10 @@ object examples {
 
     //initialize spark session
     val spark = SparkSession.builder().master("local[*]").appName("AdvancedSparkExamples").getOrCreate()
-    LogManager.getRootLogger.setLevel(Level.WARN)
-
+    spark.sparkContext.setLogLevel("ERROR")
 
     //Ex1 : API wise log parser | dataframes
-    //apiLogParse(spark)
+    apiLogParse(spark)
 
     //Ex2 : average in each subject using combineByKey(), mapValues()
     // also countByKey(), collectAsMap(),  lookup()
@@ -805,7 +902,7 @@ object examples {
     //pivotAnunpivotDF(spark)
 
     //Ex 14 : Spark CDC project
-    CDCexamplebySpark(spark)
+    //CDCexamplebySpark(spark)
 
 
     spark.stop()
